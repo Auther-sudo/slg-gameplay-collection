@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SLG玩法搬运Agent</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f3f4f6;
+            --card: #ffffff;
+            --text: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow);
+        }
+        .header h1 { font-size: 1.25rem; font-weight: 600; }
+        .header-badges { display: flex; gap: 0.5rem; }
+        .badge {
+            background: rgba(255,255,255,0.2);
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+        }
+        .main-container {
+            display: flex;
+            max-width: 1400px;
+            margin: 0 auto;
+            min-height: calc(100vh - 60px);
+        }
+        .sidebar {
+            width: 260px;
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            padding: 1.5rem;
+            position: sticky;
+            top: 0;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+        }
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 0.5rem;
+            border: 1px solid transparent;
+        }
+        .nav-item:hover { background: #f9fafb; border-color: var(--border); }
+        .nav-item.active {
+            background: #eef2ff;
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .nav-item.completed { color: var(--success); }
+        .nav-item.completed .nav-num { background: var(--success); color: white; }
+        .nav-num {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: var(--bg);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 600;
+            flex-shrink: 0;
+        }
+        .nav-item.active .nav-num { background: var(--primary); color: white; }
+        .nav-label { font-size: 0.875rem; font-weight: 500; }
+        .nav-desc { font-size: 0.75rem; color: var(--text-secondary); }
+
+        .content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+        .card {
+            background: var(--card);
+            border-radius: 0.75rem;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: var(--shadow);
+        }
+        .card-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* API Config */
+        .config-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            padding: 0.75rem 1rem;
+            background: #f9fafb;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            margin-bottom: 1rem;
+        }
+        .config-panel {
+            display: none;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .config-panel.open { display: block; }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group.full { grid-column: 1 / -1; }
+        .form-group label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin-bottom: 0.375rem;
+            color: var(--text);
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            padding: 0.625rem 0.875rem;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+        }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+        .hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.625rem 1.25rem;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: #e5e7eb; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-group { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+
+        /* Step content */
+        .step-section { display: none; }
+        .step-section.active { display: block; }
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        .step-header h2 { font-size: 1.25rem; }
+
+        /* Output areas */
+        .output-area {
+            background: #f9fafb;
+            border: 1px solid var(--border);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+            min-height: 120px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .output-area pre {
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+            font-size: 0.8125rem;
+            line-height: 1.7;
+        }
+        .output-area .markdown-body { font-size: 0.875rem; }
+        .output-area .markdown-body h1, .output-area .markdown-body h2, .output-area .markdown-body h3 {
+            margin-top: 1rem; margin-bottom: 0.5rem;
+        }
+        .output-area .markdown-body p { margin-bottom: 0.5rem; }
+        .output-area .markdown-body ul, .output-area .markdown-body ol {
+            margin-left: 1.5rem; margin-bottom: 0.5rem;
+        }
+        .output-area .markdown-body table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 0.5rem 0;
+            font-size: 0.8125rem;
+        }
+        .output-area .markdown-body th, .output-area .markdown-body td {
+            border: 1px solid var(--border);
+            padding: 0.375rem 0.625rem;
+            text-align: left;
+        }
+        .output-area .markdown-body th {
+            background: #f3f4f6;
+            font-weight: 600;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        .status-bar.pending { background: #fffbeb; border-color: #fde68a; }
+        .status-bar.error { background: #fef2f2; border-color: #fecaca; }
+        .status-bar.info { background: #eff6ff; border-color: #bfdbfe; }
+        .spinner {
+            width: 16px; height: 16px;
+            border: 2px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .info-box {
+            background: #eff6ff;
+            border-left: 4px solid var(--primary);
+            padding: 1rem;
+            border-radius: 0 0.5rem 0.5rem 0;
+            margin-bottom: 1rem;
+            font-size: 0.875rem;
+        }
+        .info-box strong { color: var(--primary); }
+
+        .trae-notice {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 1px solid #f59e0b;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+        }
+        .trae-notice strong { color: #92400e; }
+
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 1.5rem 0;
+        }
+
+        .score-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 1rem 0;
+        }
+        .score-card {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+        }
+        .score-card .score-label { font-size: 0.75rem; color: var(--text-secondary); }
+        .score-card .score-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-top: 0.25rem;
+        }
+
+        .verdict-pass { color: var(--success); font-weight: 700; }
+        .verdict-conditional { color: var(--warning); font-weight: 700; }
+        .verdict-fail { color: var(--danger); font-weight: 700; }
+
+        @media (max-width: 900px) {
+            .main-container { flex-direction: column; }
+            .sidebar { width: 100%; height: auto; position: relative; }
+            .form-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>SLG玩法搬运Agent</h1>
+        <div class="header-badges">
+            <span class="badge">5步工作流</span>
+            <span class="badge">联网搜索</span>
+            <span class="badge">用研导出</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="nav-item active" data-step="0" onclick="goToStep(0)">
+                <div class="nav-num">0</div>
+                <div>
+                    <div class="nav-label">API配置</div>
+                    <div class="nav-desc">设置LLM和搜索API</div>
+                </div>
+            </div>
+            <div class="nav-item" data-step="1" onclick="goToStep(1)">
+                <div class="nav-num">1</div>
+                <div>
+                    <div class="nav-label">玩法信息整合</div>
+                    <div class="nav-desc">源游戏玩法梳理</div>
+                </div>
+            </div>
+            <div class="nav-item" data-step="2" onclick="goToStep(2)">
+                <div class="nav-num">2</div>
+                <div>
+                    <div class="nav-label">SLG本地化与分类</div>
+                    <div class="nav-desc">转化嫁接与分类</div>
+                </div>
+            </div>
+            <div class="nav-item" data-step="3" onclick="goToStep(3)">
+                <div class="nav-num">3</div>
+                <div>
+                    <div class="nav-label">运营可行性评估</div>
+                    <div class="nav-desc">8维评分与判定</div>
+                </div>
+            </div>
+            <div class="nav-item" data-step="4" onclick="goToStep(4)">
+                <div class="nav-num">4</div>
+                <div>
+                    <div class="nav-label">生成完整玩法</div>
+                    <div class="nav-desc">分类格式输出</div>
+                </div>
+            </div>
+            <div class="nav-item" data-step="5" onclick="goToStep(5)">
+                <div class="nav-num">5</div>
+                <div>
+                    <div class="nav-label">生成用研版本</div>
+                    <div class="nav-desc">Excel格式导出</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content">
+            <!-- Step 0: API Config -->
+            <div class="step-section active" id="step-0">
+                <div class="step-header">
+                    <h2>API配置</h2>
+                </div>
+
+                <div class="trae-notice">
+                    <strong>在 TRAE 中使用？</strong><br>
+                    如果你正在 TRAE 中使用，可以直接调用已配置好的 Skill 文件，无需在此页面配置 API。<br>
+                    已有 Skill 文件：<code>slg-gameplay-porting-agent</code>、<code>slg-gameplay-transformer</code>、<code>slg-gameplay-evaluator</code>、<code>gameplay-research-formatter</code>
+                </div>
+
+                <div class="info-box">
+                    <strong>首次使用请配置 API</strong><br>
+                    本页面支持任何 OpenAI 兼容格式的 API（如 OpenAI、DeepSeek、硅基流动、Claude 等）。搜索功能可选，配置后可自动联网补充玩法信息。
+                </div>
+
+                <div class="card">
+                    <div class="card-title">LLM API 配置</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="llm-api-key" placeholder="sk-...">
+                            <div class="hint">你的 LLM API Key，仅存储在本地浏览器</div>
+                        </div>
+                        <div class="form-group">
+                            <label>API Base URL</label>
+                            <input type="text" id="llm-base-url" placeholder="https://api.openai.com/v1">
+                            <div class="hint">API 基础地址，末尾不需要 /chat/completions</div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>模型</label>
+                            <input type="text" id="llm-model" placeholder="gpt-4o / deepseek-chat / claude-3-5-sonnet">
+                            <div class="hint">模型名称，如 gpt-4o、deepseek-chat</div>
+                        </div>
+                        <div class="form-group">
+                            <label>温度 (Temperature)</label>
+                            <input type="number" id="llm-temp" value="0.7" min="0" max="2" step="0.1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">搜索 API 配置（可选）</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>搜索 API Key</label>
+                            <input type="password" id="search-api-key" placeholder="可选">
+                            <div class="hint">如 SerpAPI、Bing Search API 等，用于联网搜索玩法信息</div>
+                        </div>
+                        <div class="form-group">
+                            <label>搜索提供商</label>
+                            <select id="search-provider">
+                                <option value="">不使用搜索（仅依赖 LLM 知识）</option>
+                                <option value="serp">SerpAPI (Google)</option>
+                                <option value="bing">Bing Search API</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+                    <button class="btn btn-secondary" onclick="testConnection()">测试连接</button>
+                    <button class="btn btn-secondary" onclick="clearConfig()">清除配置</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <div class="card">
+                    <div class="card-title">快速预设</div>
+                    <div class="btn-group">
+                        <button class="btn btn-secondary" onclick="preset('openai')">OpenAI</button>
+                        <button class="btn btn-secondary" onclick="preset('deepseek')">DeepSeek</button>
+                        <button class="btn btn-secondary" onclick="preset('siliconflow')">硅基流动</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1: Info Integration -->
+            <div class="step-section" id="step-1">
+                <div class="step-header">
+                    <h2>Step 1：玩法信息整合</h2>
+                </div>
+                <div class="info-box">
+                    输入源游戏的玩法信息。如果信息不完整，Agent 会尝试联网搜索补充。
+                </div>
+                <div class="card">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>源游戏名称 *</label>
+                            <input type="text" id="source-game" placeholder="例如：原神、王者荣耀、逃离塔科夫">
+                        </div>
+                        <div class="form-group">
+                            <label>玩法名称 *</label>
+                            <input type="text" id="source-gameplay" placeholder="例如：深境螺旋、深渊大乱斗、搜打撤">
+                        </div>
+                    </div>
+                    <div class="form-group full">
+                        <label>玩法描述（你已知的信息）</label>
+                        <textarea id="source-desc" rows="5" placeholder="请描述该玩法的核心机制、流程、奖励、社交设计等。信息越完整，转化效果越好。"></textarea>
+                    </div>
+                    <div class="form-group full">
+                        <label>游戏类型</label>
+                        <select id="source-genre">
+                            <option value="">请选择</option>
+                            <option value="RPG">RPG</option>
+                            <option value="MOBA">MOBA</option>
+                            <option value="FPS/TPS">FPS/TPS</option>
+                            <option value="大逃杀">大逃杀</option>
+                            <option value="Roguelike">Roguelike</option>
+                            <option value="休闲益智">休闲益智</option>
+                            <option value="模拟经营">模拟经营</option>
+                            <option value="卡牌">卡牌</option>
+                            <option value="策略">策略</option>
+                            <option value="派对游戏">派对游戏</option>
+                            <option value="塔防">塔防</option>
+                            <option value="生存">生存</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="step1Integrate()" id="btn-step1">开始整合（联网搜索补充）</button>
+                </div>
+                <div id="step1-status"></div>
+                <div class="output-area" id="step1-output" style="display:none;"></div>
+                <div class="btn-group" id="step1-actions" style="display:none;">
+                    <button class="btn btn-success" onclick="goToStep(2)">下一步：SLG本地化</button>
+                    <button class="btn btn-secondary" onclick="copyOutput('step1-output')">复制内容</button>
+                </div>
+            </div>
+
+            <!-- Step 2: SLG Localization -->
+            <div class="step-section" id="step-2">
+                <div class="step-header">
+                    <h2>Step 2：SLG本地化与分类</h2>
+                </div>
+                <div class="info-box">
+                    基于 Step 1 的信息，将玩法转化为 SLG 框架，并归入正确分类。
+                </div>
+                <div class="card">
+                    <div class="form-group full">
+                        <label>项目世界观/题材（用于题材契合度评估）</label>
+                        <input type="text" id="project-theme" value="中世纪猎魔人末日生存" placeholder="例如：中世纪、科幻、现代战争">
+                    </div>
+                    <div class="form-group full">
+                        <label>目标 SLG 类型</label>
+                        <select id="target-slg-type">
+                            <option value="COK-like">COK-like（列王的纷争类）</option>
+                            <option value="率土-like">率土-like（率土之滨类）</option>
+                            <option value="ROK-like">ROK-like（万国觉醒类）</option>
+                            <option value="中轻度SLG">中轻度SLG（无尽冬日类）</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="step2Transform()" id="btn-step2">开始转化与分类</button>
+                </div>
+                <div id="step2-status"></div>
+                <div class="output-area" id="step2-output" style="display:none;"></div>
+                <div class="btn-group" id="step2-actions" style="display:none;">
+                    <button class="btn btn-success" onclick="goToStep(3)">下一步：运营评估</button>
+                    <button class="btn btn-secondary" onclick="copyOutput('step2-output')">复制内容</button>
+                </div>
+            </div>
+
+            <!-- Step 3: Evaluation -->
+            <div class="step-section" id="step-3">
+                <div class="step-header">
+                    <h2>Step 3：运营可行性评估</h2>
+                </div>
+                <div class="info-box">
+                    从 SLG 产品运营角度，对转化后的玩法进行 8 维度评估，输出通过/不通过判定。评估后你可以提出修改意见，AI 理解确认后再继续。
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="step3Evaluate()" id="btn-step3">开始评估</button>
+                </div>
+                <div id="step3-status"></div>
+                <div class="output-area" id="step3-output" style="display:none;"></div>
+
+                <!-- 评估后的修改对话区 -->
+                <div id="step3-revise-area" style="display:none; margin-top:1rem;">
+                    <div class="card">
+                        <div class="card-title">对评估结果或方案有修改意见？</div>
+                        <div class="form-group full">
+                            <label>告诉 AI 你的修改意见（如：删除某个机制、调整奖励、修改开启条件等）</label>
+                            <textarea id="step3-revise-input" rows="4" placeholder="例如：1. 删除组队要求，改为单人可玩；2. 奖励里增加英雄碎片；3. 开启条件从主堡15级降到10级..."></textarea>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-warning" onclick="step3Revise()" id="btn-step3-revise">提交修改意见</button>
+                            <button class="btn btn-success" onclick="step3ConfirmContinue()">无需修改，直接继续</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 修改后的确认区 -->
+                <div id="step3-revised-output-area" style="display:none; margin-top:1rem;">
+                    <div class="status-bar success">
+                        AI 已根据你的意见修改方案，请确认后继续。
+                    </div>
+                    <div class="output-area" id="step3-revised-output"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="goToStep(4)">确认，进入 Step 4</button>
+                        <button class="btn btn-secondary" onclick="copyOutput('step3-revised-output')">复制修改后的方案</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 4: Full Design -->
+            <div class="step-section" id="step-4">
+                <div class="step-header">
+                    <h2>Step 4：生成完整玩法文档</h2>
+                </div>
+                <div class="info-box">
+                    将通过评估的方案按<strong>分类格式</strong>输出为可直接交付策划团队的完整设计文档。格式会根据 Step 2 确定的分类自动匹配。
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="step4Generate()" id="btn-step4">生成完整设计文档</button>
+                </div>
+                <div id="step4-status"></div>
+                <div class="output-area" id="step4-output" style="display:none;"></div>
+                <div class="btn-group" id="step4-actions" style="display:none;">
+                    <button class="btn btn-success" onclick="goToStep(5)">下一步：生成用研</button>
+                    <button class="btn btn-secondary" onclick="copyOutput('step4-output')">复制内容</button>
+                    <button class="btn btn-secondary" onclick="downloadMarkdown('step4-output', '完整玩法设计')">下载 Markdown</button>
+                </div>
+            </div>
+
+            <!-- Step 5: Research Format -->
+            <div class="step-section" id="step-5">
+                <div class="step-header">
+                    <h2>Step 5：生成用研版本</h2>
+                </div>
+                <div class="info-box">
+                    将完整玩法文档转换为用研验证格式（玩法验证 + 吸量点验证），导出为 Excel 文件。
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="step5GenerateExcel()" id="btn-step5">生成用研 Excel</button>
+                </div>
+                <div id="step5-status"></div>
+                <div id="step5-preview" style="margin-top:1rem;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===================== 全局状态 =====================
+        let appState = {
+            config: {},
+            step1Result: '',
+            step2Result: '',
+            step3Result: '',
+            step4Result: '',
+            step5Result: null
+        };
+
+        // ===================== 配置管理 =====================
+        function loadConfig() {
+            const saved = localStorage.getItem('slg_agent_config');
+            if (saved) {
+                appState.config = JSON.parse(saved);
+                document.getElementById('llm-api-key').value = appState.config.llmApiKey || '';
+                document.getElementById('llm-base-url').value = appState.config.llmBaseUrl || '';
+                document.getElementById('llm-model').value = appState.config.llmModel || '';
+                document.getElementById('llm-temp').value = appState.config.llmTemp || '0.7';
+                document.getElementById('search-api-key').value = appState.config.searchApiKey || '';
+                document.getElementById('search-provider').value = appState.config.searchProvider || '';
+            }
+        }
+
+        function saveConfig() {
+            appState.config = {
+                llmApiKey: document.getElementById('llm-api-key').value.trim(),
+                llmBaseUrl: document.getElementById('llm-base-url').value.trim(),
+                llmModel: document.getElementById('llm-model').value.trim(),
+                llmTemp: parseFloat(document.getElementById('llm-temp').value),
+                searchApiKey: document.getElementById('search-api-key').value.trim(),
+                searchProvider: document.getElementById('search-provider').value
+            };
+            localStorage.setItem('slg_agent_config', JSON.stringify(appState.config));
+            showStatus('配置已保存', 'success');
+        }
+
+        function clearConfig() {
+            localStorage.removeItem('slg_agent_config');
+            document.getElementById('llm-api-key').value = '';
+            document.getElementById('llm-base-url').value = '';
+            document.getElementById('llm-model').value = '';
+            document.getElementById('llm-temp').value = '0.7';
+            document.getElementById('search-api-key').value = '';
+            document.getElementById('search-provider').value = '';
+            appState.config = {};
+            showStatus('配置已清除', 'info');
+        }
+
+        function preset(name) {
+            const presets = {
+                openai: { base: 'https://api.openai.com/v1', model: 'gpt-4o' },
+                deepseek: { base: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+                siliconflow: { base: 'https://api.siliconflow.cn/v1', model: 'deepseek-ai/DeepSeek-V3' }
+            };
+            const p = presets[name];
+            if (p) {
+                document.getElementById('llm-base-url').value = p.base;
+                document.getElementById('llm-model').value = p.model;
+            }
+        }
+
+        async function testConnection() {
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先填写 API Key', 'error'); return; }
+            showStatus('正在测试连接...', 'pending');
+            try {
+                await callLLM([{role:'user', content:'你好，请回复"连接成功"'}], config, false);
+                showStatus('连接成功！模型响应正常', 'success');
+            } catch (e) {
+                showStatus('连接失败：' + e.message, 'error');
+            }
+        }
+
+        function getActiveConfig() {
+            return {
+                apiKey: appState.config.llmApiKey || document.getElementById('llm-api-key').value.trim(),
+                baseUrl: (appState.config.llmBaseUrl || document.getElementById('llm-base-url').value.trim() || 'https://api.openai.com/v1').replace(/\/$/, ''),
+                model: appState.config.llmModel || document.getElementById('llm-model').value.trim() || 'gpt-4o',
+                temperature: appState.config.llmTemp || parseFloat(document.getElementById('llm-temp').value) || 0.7
+            };
+        }
+
+        // ===================== LLM 调用 =====================
+        async function callLLM(messages, config, stream = true, onChunk = null) {
+            const url = config.baseUrl + '/chat/completions';
+            const body = {
+                model: config.model,
+                messages: messages,
+                temperature: config.temperature,
+                stream: stream
+            };
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + config.apiKey
+                },
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const err = await response.text();
+                throw new Error('API错误 (' + response.status + '): ' + err);
+            }
+            if (!stream) {
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content || '';
+            }
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let result = '';
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const jsonStr = line.slice(6);
+                        if (jsonStr === '[DONE]') continue;
+                        try {
+                            const json = JSON.parse(jsonStr);
+                            const delta = json.choices?.[0]?.delta?.content || '';
+                            result += delta;
+                            if (onChunk) onChunk(delta);
+                        } catch (e) {}
+                    }
+                }
+            }
+            return result;
+        }
+
+        // ===================== 搜索 =====================
+        async function searchWeb(query) {
+            const provider = appState.config.searchProvider || document.getElementById('search-provider').value;
+            const key = appState.config.searchApiKey || document.getElementById('search-api-key').value;
+            if (!provider || !key) return null;
+            try {
+                if (provider === 'serp') {
+                    const url = `https://serpapi.com/search?q=${encodeURIComponent(query)}&api_key=${key}&engine=google&num=5`;
+                    const res = await fetch(url);
+                    const data = await res.json();
+                    return (data.organic_results || []).map(r => r.snippet).filter(Boolean).join('\n');
+                }
+                if (provider === 'bing') {
+                    const url = `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=5`;
+                    const res = await fetch(url, { headers: { 'Ocp-Apim-Subscription-Key': key } });
+                    const data = await res.json();
+                    return (data.webPages?.value || []).map(r => r.snippet).filter(Boolean).join('\n');
+                }
+            } catch (e) { console.error('Search error:', e); }
+            return null;
+        }
+
+        // ===================== 步骤导航 =====================
+        function goToStep(step) {
+            document.querySelectorAll('.step-section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById('step-' + step).classList.add('active');
+            document.querySelector('.nav-item[data-step="' + step + '"]').classList.add('active');
+        }
+
+        function markCompleted(step) {
+            const nav = document.querySelector('.nav-item[data-step="' + step + '"]');
+            if (nav) nav.classList.add('completed');
+        }
+
+        function showStatus(msg, type, elementId) {
+            const id = elementId || 'step1-status';
+            const el = document.getElementById(id);
+            if (!el) return;
+            const icon = type === 'pending' ? '<span class="spinner"></span>' : '';
+            el.innerHTML = '<div class="status-bar ' + type + '">' + icon + msg + '</div>';
+        }
+
+        function setOutput(elementId, markdown) {
+            const el = document.getElementById(elementId);
+            el.style.display = 'block';
+            el.innerHTML = '<div class="markdown-body">' + marked.parse(markdown) + '</div>';
+        }
+
+        function copyOutput(elementId) {
+            const el = document.getElementById(elementId);
+            const text = el.innerText;
+            navigator.clipboard.writeText(text).then(() => alert('已复制到剪贴板'));
+        }
+
+        function downloadMarkdown(elementId, filename) {
+            const el = document.getElementById(elementId);
+            const text = el.innerText;
+            const blob = new Blob([text], { type: 'text/markdown' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename + '.md';
+            a.click();
+        }
+
+        // ===================== Step 1 =====================
+        async function step1Integrate() {
+            const game = document.getElementById('source-game').value.trim();
+            const gameplay = document.getElementById('source-gameplay').value.trim();
+            const desc = document.getElementById('source-desc').value.trim();
+            const genre = document.getElementById('source-genre').value;
+            if (!game || !gameplay) { showStatus('请填写源游戏名称和玩法名称', 'error', 'step1-status'); return; }
+
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step1-status'); return; }
+
+            showStatus('正在整合信息...', 'pending', 'step1-status');
+            document.getElementById('btn-step1').disabled = true;
+
+            let searchInfo = '';
+            const searchQuery = game + ' ' + gameplay + ' 玩法机制 规则 攻略';
+            const searchResult = await searchWeb(searchQuery);
+            if (searchResult) {
+                searchInfo = '\n\n【联网搜索补充信息】\n' + searchResult.substring(0, 3000);
+            }
+
+            const prompt = `你是一位游戏分析师。请根据以下信息，整合输出一份结构化的源游戏玩法信息文档。\n\n源游戏：${game}\n玩法名称：${gameplay}\n游戏类型：${genre || '未指定'}\n用户已知信息：${desc || '未提供'}${searchInfo}\n\n请按以下格式输出：\n\n# 源游戏玩法信息整合\n\n## 基本信息\n- 源游戏：${game}\n- 玩法名称：${gameplay}\n- 游戏类型：${genre || '未指定'}\n- 信息完整度：高/中/低\n\n## 核心机制\n（详细描述该玩法的核心循环和关键规则）\n\n## 单局/单次体验流程\n（按时间线或步骤描述完整体验流程）\n\n## 奖励结构\n（玩家通过此玩法获得什么，成长路径如何）\n\n## 社交设计\n（是否有组队/排行/协作/对抗等社交元素）\n\n## 付费点\n（如有公开信息，描述该玩法的付费设计）\n\n## 信息来源\n- 用户输入：${desc ? '是' : '否'}\n- 联网搜索补充：${searchResult ? '是' : '否'}\n- 缺失信息：（如有缺失，明确标注）`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step1Result = result;
+                setOutput('step1-output', result);
+                document.getElementById('step1-actions').style.display = 'flex';
+                showStatus('整合完成', 'success', 'step1-status');
+                markCompleted(1);
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step1-status');
+            } finally {
+                document.getElementById('btn-step1').disabled = false;
+            }
+        }
+
+        // ===================== Step 2 =====================
+        async function step2Transform() {
+            if (!appState.step1Result) { showStatus('请先完成 Step 1', 'error', 'step2-status'); return; }
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step2-status'); return; }
+
+            const theme = document.getElementById('project-theme').value;
+            const slgType = document.getElementById('target-slg-type').value;
+
+            showStatus('正在进行 SLG 本地化转化...', 'pending', 'step2-status');
+            document.getElementById('btn-step2').disabled = true;
+
+            const prompt = `你是一位 SLG 游戏策划专家。请将以下源游戏玩法转化为 ${slgType} 类型的 SLG 玩法。\n\n项目题材：${theme}\n\n${appState.step1Result}\n\n---\n\n请严格按照以下要求输出：\n\n1. **保留核心乐趣，嫁接 SLG 框架**：提取原玩法的核心爽点，将其嵌入 SLG 的资源-战斗-养成循环中\n2. **控制单局时长**：适配碎片化，通常 3-30 分钟\n3. **社交化改造**：增加排行/组队/联盟互动\n4. **数值挂钩**：产出关联主线养成资源（英雄碎片、装备材料、加速道具）\n5. **降低操作门槛**：自动战斗+战前策略配置\n\n输出格式：\n\n# SLG本地化方案\n\n## 转化概述\n- 源玩法：XXX\n- SLG分类：XXX（一级分类 > 二级分类）\n  - 一级分类：核心社交玩法 / 模拟经营养成线 / 非社交副玩法 / 社交系统 / 特色卖点机制\n  - 二级分类：如 GVG大地图争夺 / 建筑养成 / 合成消除类 / 好友系统 等\n- 转化核心思路：（一句话概括）\n\n## 详细方案\n根据分类使用对应格式：\n- 社交玩法/副玩法：包含【玩法开启节奏】【核心机制】【玩法流程】【特殊规则】【预期奖励】\n- 养成线：包含【功能简介】【养成上限】【升满参考】【养成深度参考】【功能参考】\n- 社交系统：包含【社交步骤】【适用类型】【方案推荐】【关联系统】【方案描述】\n- 特色卖点：包含【卖点层级】【适用分类】【具体内容】\n\n## 转化检查清单\n- [ ] 核心乐趣是否被保留？\n- [ ] 单局时长是否适配（3-30分钟）？\n- [ ] 是否有社交化元素？\n- [ ] 产出是否关联主线养成资源？\n- [ ] 是否有赛季/周期重置机制？\n- [ ] 操作门槛是否适配SLG玩家？\n- [ ] 是否有足够的策略选择空间？\n- [ ] 付费点是否自然融入？\n\n## 12维评估标签\n- 目标感：X/5\n- 乐趣性：X/5\n- 新鲜感：X/5\n- 策略性：X/5\n- 成长感：X/5\n- 社交感：X/5\n- 下载意愿：X/5\n- 用户评价/尖叫度：X/5\n- 重复游玩时长：X/5\n- 留存意愿：X/5\n- 需求程度：X/5\n- 使用频次：X/5\n- 是否入方案库：是/否`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step2Result = result;
+                setOutput('step2-output', result);
+                document.getElementById('step2-actions').style.display = 'flex';
+                showStatus('转化完成', 'success', 'step2-status');
+                markCompleted(2);
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step2-status');
+            } finally {
+                document.getElementById('btn-step2').disabled = false;
+            }
+        }
+
+        // ===================== Step 3 =====================
+        async function step3Evaluate() {
+            if (!appState.step2Result) { showStatus('请先完成 Step 2', 'error', 'step3-status'); return; }
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step3-status'); return; }
+
+            showStatus('正在进行运营可行性评估...', 'pending', 'step3-status');
+            document.getElementById('btn-step3').disabled = true;
+
+            const prompt = `你是一位资深 SLG 产品运营经理，拥有10年以上 SLG 产品运营与商业化经验。\n\n请对以下 SLG 本地化玩法方案进行严格评估。\n\n${appState.step2Result}\n\n---\n\n请从以下8个维度进行评估（每个维度1-5分）：\n\n1. **核心循环兼容性**（权重20%）：是否能自然嵌入SLG核心循环（搜刮-战斗-养成-联盟）\n2. **商业化可行性**（权重20%）：是否有清晰自然的付费点，非付费玩家能否获得80%核心体验\n3. **社交驱动性**（权重15%）：是否促进玩家间互动（协作/对抗/展示）\n4. **留存驱动力**（权重15%）：是否有周期重置/日常目标/进度可视化驱动回流\n5. **吸量与传播性**（权重10%）：是否具备广告素材潜力\n6. **开发落地成本**（权重10%）：技术实现难度和资源投入\n7. **运营维护成本**（权重5%）：上线后的持续运营投入\n8. **题材与世界观契合度**（权重5%）：是否与项目题材一致\n\n输出格式：\n\n# 玩法可行性评估报告\n\n## 基本信息\n- 玩法名称：XXX\n- 来源游戏：XXX\n- SLG分类：XXX\n\n## 八维评分\n| 维度 | 评分 | 权重 | 加权分 | 关键判断依据 |\n|------|------|------|--------|-------------|\n（逐行输出8个维度）\n\n**综合得分**：X.X / 5.0\n\n## 判定结果\n### [通过 / 有条件通过 / 不通过]\n\n**判定理由**：（3-5句话）\n\n## 关键风险与建议\n（列出2-3个风险，每个包含风险描述、影响程度、应对建议）\n\n## 优化建议（如判定为"有条件通过"或"不通过"）\n1. ...\n2. ...\n3. ...\n\n## 开发优先级建议\n- [ ] S级 / A级 / B级 / C级\n\n判定标准：\n- 综合得分 >= 4.0：通过\n- 3.0 - 3.9：有条件通过\n- < 3.0：不通过\n\n一票否决项（满足任一即不通过）：\n- 核心循环兼容性 <= 2分\n- 非副玩法的社交驱动性 = 1分\n- 开发落地成本 = 1分且技术风险无法规避`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step3Result = result;
+                setOutput('step3-output', result);
+                document.getElementById('step3-revise-area').style.display = 'block';
+                showStatus('评估完成。请查看评估结果，如有修改意见请在下方输入，AI 确认后再继续。', 'success', 'step3-status');
+                markCompleted(3);
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step3-status');
+            } finally {
+                document.getElementById('btn-step3').disabled = false;
+            }
+        }
+
+        // ===================== Step 3 修改对话 =====================
+        async function step3Revise() {
+            const reviseInput = document.getElementById('step3-revise-input').value.trim();
+            if (!reviseInput) { showStatus('请输入修改意见', 'error', 'step3-status'); return; }
+
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step3-status'); return; }
+
+            showStatus('AI 正在理解你的修改意见并调整方案...', 'pending', 'step3-status');
+            document.getElementById('btn-step3-revise').disabled = true;
+
+            const prompt = `你是一位 SLG 游戏策划专家。请根据用户的修改意见，对以下 SLG 本地化方案进行调整。\n\n当前方案：\n${appState.step2Result}\n\n评估报告：\n${appState.step3Result}\n\n用户的修改意见：\n${reviseInput}\n\n---\n\n请按以下要求处理：\n1. 仔细阅读用户的每条修改意见，确保完全理解意图\n2. 对当前方案进行相应调整，保留未提及的部分不变\n3. 输出调整后的完整方案，保持原有格式和分类\n4. 在文末增加"修改说明"段落，逐条说明针对用户意见做了哪些调整\n\n如果用户意见与评估报告中的建议冲突，优先遵循用户意见（用户有最终决定权）。`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step2Result = result;
+                document.getElementById('step3-revise-area').style.display = 'none';
+                document.getElementById('step3-revised-output-area').style.display = 'block';
+                setOutput('step3-revised-output', result);
+                showStatus('方案已根据你的意见修改，请确认后继续', 'success', 'step3-status');
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step3-status');
+            } finally {
+                document.getElementById('btn-step3-revise').disabled = false;
+            }
+        }
+
+        function step3ConfirmContinue() {
+            document.getElementById('step3-revise-area').style.display = 'none';
+            goToStep(4);
+        }
+
+        // ===================== Step 4 =====================
+        async function step4Generate() {
+            if (!appState.step3Result) { showStatus('请先完成 Step 3', 'error', 'step4-status'); return; }
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step4-status'); return; }
+
+            showStatus('正在生成完整玩法文档...', 'pending', 'step4-status');
+            document.getElementById('btn-step4').disabled = true;
+
+            const prompt = `你是一位 SLG 游戏策划专家。请基于以下已通过评估的玩法方案，按分类格式输出可直接交付策划团队的完整设计文档。\n\n${appState.step2Result}\n\n评估报告（供参考）：\n${appState.step3Result}\n\n---\n\n重要：请根据方案中的"SLG分类"，使用对应的格式模板输出完整设计文档。\n\n## 格式模板说明\n\n### 模板A：社交玩法/副玩法 输出格式\n\n\`\`\`\n【功能名称】XXX\n\n一、玩法名称\nXXX\n\n二、玩法开启节奏\n- 开启条件：XXX\n- 开启周期：XXX\n- 开放时段：XXX\n- 玩法类型：XXX\n- 参与条件：XXX\n\n三、玩法描述\n1、核心机制：\n2、玩法流程：\n3、特殊规则：\n\n四、玩法预期奖励\n- 日常/单次奖励：\n- 排名/段位奖励：\n- 赛季/累计奖励：\n- 商店兑换：\n\`\`\`\n\n### 模板B：养成线 输出格式\n\n\`\`\`\n【功能名称】XXX\n\n功能简介：\n养成上限：XXX\n升满参考：XXX\n养成深度参考：XXX\n功能参考：XXX\n\`\`\`\n\n### 模板C：社交系统 输出格式\n\n\`\`\`\n【方案名称】XXX\n\n社交步骤：XXX\n适用社交类型：XXX\n方案推荐：XXX\n关联系统：XXX\n方案描述：\n来源游戏：XXX\n\`\`\`\n\n### 模板D：特色卖点 输出格式\n\n\`\`\`\n【卖点名称】XXX\n\n卖点层级：XXX\n适用分类：XXX\n具体内容：\n\`\`\`\n\n---\n\n输出要求：\n1. 根据方案中的分类，选择对应的模板（A/B/C/D）\n2. 尽可能详细地填充每个字段，补充具体的数值节点（解锁等级、消耗数量、产出数量、成长周期等）\n3. 增加"关联系统"部分，说明与现有系统的交互\n4. 增加"边界情况与异常处理"\n5. 增加"待确认事项"，列出需要策划/程序/美术进一步确认的设计点\n6. 文末附上"玩法评估标签"（12维评分）`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step4Result = result;
+                setOutput('step4-output', result);
+                document.getElementById('step4-actions').style.display = 'flex';
+                showStatus('文档生成完成', 'success', 'step4-status');
+                markCompleted(4);
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step4-status');
+            } finally {
+                document.getElementById('btn-step4').disabled = false;
+            }
+        }
+
+        // ===================== Step 5 =====================
+        async function step5GenerateExcel() {
+            if (!appState.step4Result) { showStatus('请先完成 Step 4', 'error', 'step5-status'); return; }
+            const config = getActiveConfig();
+            if (!config.apiKey) { showStatus('请先配置 LLM API', 'error', 'step5-status'); return; }
+
+            showStatus('正在生成用研内容...', 'pending', 'step5-status');
+            document.getElementById('btn-step5').disabled = true;
+
+            const prompt = `你是一位游戏用研专员。请将以下完整玩法设计文档整理为两种标准用研验证格式。\n\n${appState.step4Result}\n\n---\n\n请输出两个部分：\n\n## 部分一：玩法验证格式\n为每个完整的玩法系统，输出：\n- 名称（2-6个字）\n- 玩法描述（必须包含：开启条件→核心机制→规则细节→奖励产出）\n\n## 部分二：吸量点验证格式\n从上述玩法中提炼所有吸量亮点，每条描述一个独立的"高光时刻"：\n- 以"玩家"为主语\n- 包含触发条件、核心机制、概率惊喜\n- 必须包含至少一处"有概率/有一定概率"的惊喜元素\n- 描述具体、有画面感\n\n输出格式请使用清晰的标记，方便程序提取。`;
+
+            try {
+                const result = await callLLM([{role:'user', content:prompt}], config, false);
+                appState.step5Result = result;
+
+                // Parse and generate Excel
+                const gameplayRows = extractSections(result, '玩法验证');
+                const hookRows = extractSections(result, '吸量点');
+
+                const wb = XLSX.utils.book_new();
+
+                const wsData = [['名称', '玩法']];
+                gameplayRows.forEach(r => wsData.push([r.name, r.content]));
+                const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+                ws1['!cols'] = [{wch:20}, {wch:100}];
+                XLSX.utils.book_append_sheet(wb, ws1, '玩法验证');
+
+                const ws2Data = hookRows.map(r => [r.content]);
+                const ws2 = XLSX.utils.aoa_to_sheet(ws2Data);
+                ws2['!cols'] = [{wch:120}];
+                XLSX.utils.book_append_sheet(wb, ws2, '吸量点验证');
+
+                const game = document.getElementById('source-game').value || '玩法';
+                const gameplay = document.getElementById('source-gameplay').value || '搬运';
+                const filename = game + '_' + gameplay + '_用研验证_' + new Date().toISOString().slice(0,10) + '.xlsx';
+                XLSX.writeFile(wb, filename);
+
+                showStatus('Excel 已生成并下载', 'success', 'step5-status');
+                markCompleted(5);
+
+                const preview = document.getElementById('step5-preview');
+                preview.innerHTML = '<div class="card"><div class="card-title">用研内容预览</div><div class="markdown-body">' + marked.parse(result) + '</div></div>';
+            } catch (e) {
+                showStatus('错误：' + e.message, 'error', 'step5-status');
+            } finally {
+                document.getElementById('btn-step5').disabled = false;
+            }
+        }
+
+        function extractSections(text, keyword) {
+            const results = [];
+            const lines = text.split('\n');
+            let current = null;
+            let inSection = false;
+            for (const line of lines) {
+                if (line.includes(keyword)) {
+                    inSection = true;
+                    continue;
+                }
+                if (inSection && line.startsWith('## ')) {
+                    inSection = false;
+                    continue;
+                }
+                if (!inSection) continue;
+                const nameMatch = line.match(/^[-*\d\.]+\s*名称[:：]\s*(.+)/);
+                if (nameMatch) {
+                    if (current) results.push(current);
+                    current = { name: nameMatch[1].trim(), content: '' };
+                    continue;
+                }
+                if (current) {
+                    current.content += line + '\n';
+                }
+            }
+            if (current) results.push(current);
+            if (results.length === 0 && text.trim()) {
+                results.push({ name: '玩法', content: text.trim() });
+            }
+            return results;
+        }
+
+        // ===================== 初始化 =====================
+        loadConfig();
+    </script>
+</body>
+</html>
